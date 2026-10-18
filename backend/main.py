@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.config import(
     ALLOWED_ORIGINS, 
+    ALLOW_ORIGIN_REGEX,
     APP_DESCRIPTION, 
     APP_TITLE, 
     APP_VERSION, 
@@ -52,10 +53,10 @@ app=FastAPI(
 app.add_middleware(
     CORSMiddleware, 
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOW_ORIGIN_REGEX,
     allow_credentials=True, 
     allow_methods     = ['*'],
     allow_headers     = ['*'],
-
 )
 
 app.include_router(router)
