@@ -58,7 +58,10 @@ def _verify_token(token: str) -> dict:
     raise jwt.InvalidTokenError(f'Unsupported JWT algorithm: {alg}')
 
 
+from fastapi import Depends, HTTPException, Request, status
+
 def get_current_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> str:
     if creds is None or not creds.credentials:
@@ -90,8 +93,6 @@ def get_current_user(
             headers={'WWW-Authenticate': 'Bearer'},
         )
     except Exception as exc:
-        # PyJWKClient can raise network errors fetching JWKS; surface them as 401
-        # so a misconfigured backend doesn't look like a 500 to the user.
         logger.warning(f'JWT verification failed: {exc}')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,4 +106,5 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Token missing subject claim',
         )
+    request.state.user_id = user_id
     return user_id

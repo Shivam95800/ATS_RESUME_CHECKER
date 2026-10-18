@@ -1,24 +1,54 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from backend.core.config import(
+import os
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from backend.utils.limiter import limiter
+from backend.core.config import (
     ALLOWED_ORIGINS, 
     ALLOW_ORIGIN_REGEX,
     APP_DESCRIPTION, 
     APP_TITLE, 
     APP_VERSION, 
+    MAX_FILE_SIZE_BYTES,
     SPACY_MODEL_PRIMARY, 
-    SPACY_MODEL_SECONDARY, SENTENCE_TRANSFORMER_MODEL
+    SPACY_MODEL_SECONDARY,
+    SENTENCE_TRANSFORMER_MODEL,
 )
 from backend.api.routes import router
 
-logger=logging.getLogger('ats_resume_scorer')
+logger = logging.getLogger('ats_resume_scorer')
+
+REQUIRED_ENV_VARS = [
+    "GROQ_API_KEY",
+    "SUPABASE_URL",
+    "SUPABASE_KEY",
+    "SUPABASE_JWT_SECRET",
+]
+OPTIONAL_ENV_VARS = [
+    "SUPABASE_ANON_KEY",
+    "ALLOWED_ORIGINS",
+    "SENTENCE_TRANSFORMER_MODEL",
+    "SPACY_MODEL",
+]
 
 @asynccontextmanager
-async def lifespan(app:FastAPI):
+async def lifespan(app: FastAPI):
     logger.info('Starting ATS Resume Analyzer API...')
+
+    # Startup check: verify required env vars without printing values
+    missing_required = [v for v in REQUIRED_ENV_VARS if not os.getenv(v)]
+    missing_optional = [v for v in OPTIONAL_ENV_VARS if not os.getenv(v)]
+    if missing_required:
+        logger.warning("Startup check - Missing REQUIRED environment variables: %s", ", ".join(missing_required))
+    else:
+        logger.info("Startup check - All required environment variables are set.")
+    if missing_optional:
+        logger.info("Startup check - Missing optional environment variables (defaults active): %s", ", ".join(missing_optional))
 
     logger.info(f'Loading spaCy NLP model: {SPACY_MODEL_PRIMARY}')
     import spacy
@@ -39,9 +69,9 @@ async def lifespan(app:FastAPI):
 
     yield
 
-    logger.info('shutting down the api!!')
+    logger.info('Shutting down ATS Resume Analyzer API...')
 
-app=FastAPI(
+app = FastAPI(
     title=APP_TITLE, 
     description=APP_DESCRIPTION, 
     version=APP_VERSION, 
@@ -49,6 +79,9 @@ app=FastAPI(
     docs_url='/docs',
     redoc_url='/redoc'
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware, 
@@ -59,8 +92,21 @@ app.add_middleware(
     allow_headers     = ['*'],
 )
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+@app.middleware("http")
+async def limit_request_body_size(request: Request, call_next):
+    # Allow 1 MB margin over max file size for multipart form boundaries and fields
+    max_allowed = MAX_FILE_SIZE_BYTES + (1024 * 1024)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_allowed:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"Request payload exceeds the maximum allowed size of {max_allowed // (1024 * 1024)} MB."}
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
 
 app.include_router(router)
 

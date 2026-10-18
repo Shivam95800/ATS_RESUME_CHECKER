@@ -1,15 +1,16 @@
+import asyncio
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import PlainTextResponse, Response
 
 from backend.api.auth import get_current_user
+from backend.core.config import MAX_FILE_SIZE_BYTES
 from backend.models.schemas import AnalysisResponse, ComponentScores, JDComparison, SkillValidationDetails
-from backend.utils.file_utils import (
-    get_default_grammar_results,
-    get_default_location_results,
-    get_default_skill_validation_results,
-)
+from backend.utils.limiter import limiter
 
 logger = logging.getLogger('ats_resume_scorer')
 
@@ -20,7 +21,52 @@ def _clean(text: str) -> str:
         text = text.lstrip(prefix)
     return text.strip()
 
+@router.post('/parse-jd')
+async def parse_jd(
+    request: Request,
+    file: UploadFile = File(..., description="Job description file (PDF, DOCX, or TXT, max 5 MB)"),
+    user_id: str = Depends(get_current_user),
+):
+    """Extract and return plain text from an uploaded Job Description (PDF, DOCX, or TXT)."""
+    file_bytes = await file.read()
+    filename = file.filename or 'job_description.txt'
+
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="JD file exceeds maximum allowed size of 5 MB.")
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded JD file is empty.")
+
+    ext = os.path.splitext(filename)[1].lower()
+    try:
+        if ext == '.pdf':
+            from backend.services.resume_parser import extract_text_from_pdf
+            text = await run_in_threadpool(extract_text_from_pdf, file_bytes)
+        elif ext == '.docx':
+            from backend.services.resume_parser import extract_text_from_docx
+            text = await run_in_threadpool(extract_text_from_docx, file_bytes)
+        elif ext in ('.txt', ''):
+            try:
+                text = file_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                text = file_bytes.decode('latin-1', errors='replace')
+        else:
+            from backend.services.resume_parser import parse_resume_file
+            text, _ = await run_in_threadpool(parse_resume_file, file_bytes, filename)
+    except Exception as exc:
+        logger.warning(f"JD parsing failed for '{filename}': {exc}")
+        raise HTTPException(status_code=422, detail=f"Could not read or parse JD document: {exc}")
+
+    cleaned_text = text.strip()
+    if not cleaned_text:
+        raise HTTPException(status_code=422, detail="No readable text found in the job description file.")
+
+    if "text/plain" in request.headers.get("accept", ""):
+        return PlainTextResponse(cleaned_text)
+
+    return {"text": cleaned_text, "filename": filename, "char_count": len(cleaned_text)}
+
 @router.post('/analyze-resume', response_model=AnalysisResponse)
+@limiter.limit("15/minute")
 async def analyze_resume(
     request: Request,
     resume: UploadFile = File(..., description='Resume file — PDF or DOCX, max 5 MB'),
@@ -29,10 +75,8 @@ async def analyze_resume(
 ):
     warnings: List[str] = []
 
-
     nlp      = request.app.state.nlp
     embedder = request.app.state.embedder
-
 
     try:
         file_bytes = await resume.read()
@@ -47,7 +91,7 @@ async def analyze_resume(
             parse_resume_file,
         )
 
-        resume_text, _metadata = parse_resume_file(file_bytes, filename)
+        resume_text, _metadata = await run_in_threadpool(parse_resume_file, file_bytes, filename)
         logger.info(f"Parsed '{filename}': {len(resume_text)} chars extracted")
 
     except FileTooLargeError as exc:
@@ -65,11 +109,12 @@ async def analyze_resume(
         logger.exception("Unexpected error while reading or parsing resume file")
         raise HTTPException(status_code=500, detail="Internal server error while processing the resume.")
 
-    # Full Analysis Pipeline
+    # Full Analysis Pipeline (run offloaded in threadpool to prevent event loop starvation)
     try:
         from backend.services.resume_analyzer import analyze_full_resume
         
-        result = analyze_full_resume(
+        result = await run_in_threadpool(
+            analyze_full_resume,
             resume_text=resume_text,
             nlp=nlp,
             embedder=embedder,
@@ -140,8 +185,8 @@ async def health_check(request: Request):
     """Health check — confirms models are loaded and the API is ready."""
     return {
         'status':          'healthy',
-        'nlp_loaded':      request.app.state.nlp is not None,
-        'embedder_loaded': request.app.state.embedder is not None,
+        'nlp_loaded':      getattr(request.app.state, 'nlp', None) is not None,
+        'embedder_loaded': getattr(request.app.state, 'embedder', None) is not None,
     }
 
 @router.get('/history')
@@ -175,17 +220,26 @@ async def delete_history_entry(
     
 
 @router.post('/generate-pdf')
+@limiter.limit("10/minute")
 async def generate_pdf(
+    request: Request,
     data: AnalysisResponse,
     user_id: str = Depends(get_current_user),
 ):
     from backend.services.report_generator import generate_html_reports
     from backend.services.pdf_export import generate_combined_pdf
-    from fastapi.responses import Response
+
+    data_dict = data.model_dump()
+    # Cap feedback items to prevent excessive render time / memory blowup
+    if len(data_dict.get('detailed_feedback', [])) > 150:
+        data_dict['detailed_feedback'] = data_dict['detailed_feedback'][:150]
 
     try:
-        html_docs = generate_html_reports(data.model_dump())
-        pdf_bytes = generate_combined_pdf(html_docs)
+        html_docs = await run_in_threadpool(generate_html_reports, data_dict)
+        pdf_bytes = await asyncio.wait_for(
+            run_in_threadpool(generate_combined_pdf, html_docs),
+            timeout=15.0,
+        )
 
         return Response(
             content=pdf_bytes,
@@ -194,20 +248,27 @@ async def generate_pdf(
                 "Content-Disposition": "attachment; filename=ats_report.pdf"
             }
         )
+    except asyncio.TimeoutError:
+        logger.error("PDF generation timed out (>15s)")
+        raise HTTPException(status_code=504, detail="PDF generation timed out (>15s). Please try again.")
+    except ImportError as e:
+        logger.error(f"PDF rendering library unavailable: {e}")
+        raise HTTPException(status_code=503, detail="PDF generation service unavailable (WeasyPrint not installed).")
     except Exception as e:
         logger.error(f'Failed to generate PDF: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
     
 
 @router.get('/history/{analysis_id}/pdf')
+@limiter.limit("10/minute")
 async def generate_history_pdf(
+    request: Request,
     analysis_id: str,
     user_id: str = Depends(get_current_user),
 ):
     from backend.database.supabase_db import get_user_history
     from backend.services.report_generator import generate_html_reports
     from backend.services.pdf_export import generate_combined_pdf
-    from fastapi.responses import Response
 
     history = await get_user_history(user_id)
     analysis_data = next((item["analysis_result"] for item in history if item["id"] == analysis_id), None)
@@ -215,9 +276,15 @@ async def generate_history_pdf(
     if not analysis_data:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
+    if isinstance(analysis_data, dict) and len(analysis_data.get('detailed_feedback', [])) > 150:
+        analysis_data['detailed_feedback'] = analysis_data['detailed_feedback'][:150]
+
     try:
-        html_docs = generate_html_reports(analysis_data)
-        pdf_bytes = generate_combined_pdf(html_docs)
+        html_docs = await run_in_threadpool(generate_html_reports, analysis_data)
+        pdf_bytes = await asyncio.wait_for(
+            run_in_threadpool(generate_combined_pdf, html_docs),
+            timeout=15.0,
+        )
 
         return Response(
             content=pdf_bytes,
@@ -226,6 +293,12 @@ async def generate_history_pdf(
                 "Content-Disposition": f"attachment; filename=ats_report_{analysis_id}.pdf"
             }
         )
+    except asyncio.TimeoutError:
+        logger.error(f"History PDF generation timed out for {analysis_id}")
+        raise HTTPException(status_code=504, detail="PDF generation timed out (>15s). Please try again.")
+    except ImportError as e:
+        logger.error(f"PDF rendering library unavailable: {e}")
+        raise HTTPException(status_code=503, detail="PDF generation service unavailable (WeasyPrint not installed).")
     except Exception as e:
         logger.error(f'Failed to generate PDF for history: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
