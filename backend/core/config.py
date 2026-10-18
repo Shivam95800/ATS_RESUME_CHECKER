@@ -34,24 +34,32 @@ MAX_FILE_SIZE_BYTES=MAX_FILE_SIZE_MB*1024*1024
 #Supported MIME types and their short names
 SUPPORTED_MIME_TYPES = {
     'application/pdf': 'pdf',
-    'application/msword': 'doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
 }
 
-SUPPORTED_EXTENSIONS = {'.pdf', '.doc', '.docx'}
+SUPPORTED_EXTENSIONS = {'.pdf', '.docx'}
 
 SPACY_MODEL_PRIMARY = os.getenv("SPACY_MODEL", "en_core_web_md") # better accuracy
 SPACY_MODEL_SECONDARY = "en_core_web_sm"
 SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
 
-# Score component weights — this is business logic treated as config
-SCORE_WEIGHTS = {
-    "formatting": 20, "keywords": 25, "content": 25,
-    "skill_validation": 15, "ats_compatibility": 15,
+# Canonical score component maxima (single source of truth for backend & frontend)
+COMPONENT_MAXIMA = {
+    "formatting": 20.0,
+    "keywords": 25.0,
+    "content": 25.0,
+    "skill_validation": 15.0,
+    "ats_compatibility": 15.0,
 }
+SCORE_WEIGHTS = COMPONENT_MAXIMA
 
-JD_KEYWORD_WEIGHT=0.6
-JD_SEMANTIC_WEIGHT=0.4
+# Blend weights for calculating the final overall ATS score (sum = 1.0)
+BLEND_WEIGHTS = {
+    "skills_and_keywords": 0.40,  # 60% keywords + 40% skill validation
+    "content": 0.30,
+    "formatting": 0.15,
+    "ats_compatibility": 0.15,
+}
 
 SUPABASE_URL       = os.getenv('SUPABASE_URL', '')
 SUPABASE_KEY       = os.getenv('SUPABASE_KEY', '')          # service_role — DB writes (bypasses RLS)

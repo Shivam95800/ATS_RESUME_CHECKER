@@ -39,22 +39,33 @@ async def analyze_resume(
         filename   = resume.filename or 'resume'
 
         from backend.services.resume_parser import (
+            FileEmptyError,
             FileParsingError,
+            FileTooLargeError,
             FileValidationError,
+            UnsupportedFileTypeError,
             parse_resume_file,
         )
 
         resume_text, _metadata = parse_resume_file(file_bytes, filename)
         logger.info(f"Parsed '{filename}': {len(resume_text)} chars extracted")
 
+    except FileTooLargeError as exc:
+        logger.warning(f"File upload too large: {exc}")
+        raise HTTPException(status_code=413, detail=str(exc))
+    except UnsupportedFileTypeError as exc:
+        logger.warning(f"Unsupported file type uploaded: {exc}")
+        raise HTTPException(status_code=415, detail=str(exc))
+    except (FileEmptyError, FileParsingError, FileValidationError) as exc:
+        logger.warning(f"File parse/validation failed: {exc}")
+        raise HTTPException(status_code=422, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.error(f'File parsing failed: {exc}')
-        raise HTTPException(
-            status_code=422,
-            detail=f'Could not read or parse the resume: {exc}',
-        )
+        logger.exception("Unexpected error while reading or parsing resume file")
+        raise HTTPException(status_code=500, detail="Internal server error while processing the resume.")
 
-    #Full Analysis Pipeline 
+    # Full Analysis Pipeline
     try:
         from backend.services.resume_analyzer import analyze_full_resume
         
@@ -64,13 +75,15 @@ async def analyze_resume(
             embedder=embedder,
             job_description=job_description
         )
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.error(f'Full analysis pipeline failed: {exc}')
-        raise HTTPException(status_code=500, detail=f'Analysis pipeline failed: {exc}')
+        logger.exception("Full analysis pipeline failed")
+        raise HTTPException(status_code=500, detail="An error occurred while analyzing the resume. Please try again.")
 
     from backend.models.schemas import ComponentScores
 
-    #Extract jd_comparison details
+    # Extract jd_comparison details
     jd_comparison_result = None
     if result.get('jd_comparison'):
         jd_comparison_result = JDComparison(
@@ -83,7 +96,6 @@ async def analyze_resume(
 
     # Convert detailed_feedback objects from prediction into what schema expects
     detailed_fb = result.get('detailed_feedback', [])
-    
 
     svd_raw = result.get('skill_validation_details') or {}
     skill_val_details = SkillValidationDetails(
@@ -95,23 +107,25 @@ async def analyze_resume(
     )
 
     response = AnalysisResponse(
-        ATS_score=result['ats_score'],
+        ats_score=result['ats_score'],
         component_scores=ComponentScores(**result['component_scores']),
-        issues_summary=result['issues_summary'],
+        issues_summary=result.get('issues_summary', []),
         detailed_feedback=detailed_fb,
         jd_match_analysis=jd_comparison_result,
         skill_validation_details=skill_val_details,
 
-        # Retro-compatibility fields
-        ats_score=result['ats_score'],
+        job_title=result.get('job_title', 'General Resume'),
         keyword_match=jd_comparison_result.match_percentage if jd_comparison_result else 0.0,
         missing_keywords=result.get('missing_keywords', []),
         matched_keywords=result.get('matched_keywords', []),
+        suggestions=result.get('suggestions', []),
+        strengths=result.get('strengths', []),
+        critical_issues=result.get('critical_issues', []),
         skills=list(result.get('skills', [])[:20]),
         jd_comparison=jd_comparison_result,
-        interpretation=result.get('interpretation', '')
+        warnings=result.get('warnings', []),
+        interpretation=result.get('interpretation', ''),
     )
-
 
     try:
         from backend.database.supabase_db import save_analysis

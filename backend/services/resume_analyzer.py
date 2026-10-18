@@ -65,11 +65,23 @@ def analyze_full_resume(
             nlp=nlp,
         )
 
+    from backend.services.ats_scorer import detect_location_info
+    from backend.services.grammar_checker import check_grammar
     from backend.utils.file_utils import (
         get_default_grammar_results, get_default_location_results,
     )
-    grammar_results  = get_default_grammar_results()
-    location_results = get_default_location_results()
+
+    try:
+        location_results = detect_location_info(resume_text, nlp)
+    except Exception as exc:
+        logger.warning(f"Location detection failed: {exc}")
+        location_results = get_default_location_results()
+
+    try:
+        grammar_results = check_grammar(resume_text)
+    except Exception as exc:
+        logger.warning(f"Grammar check failed: {exc}")
+        grammar_results = get_default_grammar_results()
 
     scores = calculate_overall_score(
         text=resume_text,
@@ -96,6 +108,22 @@ def analyze_full_resume(
 
     issues_summary = generate_issues_summary(detailed_feedback)
 
+    critical_issues = [
+        fb.issue_title if hasattr(fb, 'issue_title') else fb.get('issue_title', '')
+        for fb in detailed_feedback
+        if (getattr(fb, 'severity_level', None) or (isinstance(fb, dict) and fb.get('severity_level', ''))).lower() in ('high', 'critical')
+    ]
+    suggestions = []
+    for fb in detailed_feedback:
+        fix = getattr(fb, 'how_to_fix', '') or (fb.get('how_to_fix', '') if isinstance(fb, dict) else '')
+        if fix and fix not in suggestions:
+            suggestions.append(fix)
+    warnings = [
+        fb.issue_title if hasattr(fb, 'issue_title') else fb.get('issue_title', '')
+        for fb in detailed_feedback
+        if (getattr(fb, 'severity_level', None) or (isinstance(fb, dict) and fb.get('severity_level', ''))).lower() in ('medium', 'moderate', 'warning')
+    ]
+
     validated_raw   = skill_validation.get('validated_skills', [])
     unvalidated_raw = skill_validation.get('unvalidated_skills', [])
     total_skills    = len(validated_raw) + len(unvalidated_raw)
@@ -115,8 +143,18 @@ def analyze_full_resume(
         "validation_pct":  val_pct,
     }
 
+    # Derive resolved job title
+    job_title = ""
+    if jd_comparison_result and parsed_jd.get('job_title'):
+        job_title = parsed_jd['job_title'].strip()
+    if not job_title:
+        exp = parsed_resume.get('experience', [])
+        if exp and isinstance(exp, list) and isinstance(exp[0], dict) and exp[0].get('job_title'):
+            job_title = exp[0].get('job_title').strip()
+        else:
+            job_title = "General Resume"
+
     return {
-        "ATS_score":          scores['overall_score'],
         "ats_score":          scores['overall_score'],
         "component_scores": {
             "formatting":       scores['formatting_score'],
@@ -138,7 +176,11 @@ def analyze_full_resume(
             jd_comparison_result['missing_keywords']
             if jd_comparison_result else []
         ),
-        "strengths": _generate_strengths(parsed_resume, skills, projects, action_verbs, skill_validation, scores),
+        "strengths":         _generate_strengths(parsed_resume, skills, projects, action_verbs, skill_validation, scores),
+        "critical_issues":   critical_issues,
+        "suggestions":       suggestions,
+        "warnings":          warnings,
+        "job_title":         job_title,
         "interpretation":    scores.get('overall_interpretation', ''),
         "skill_validation_details": skill_validation_details,
         "experience_months": experience_months,

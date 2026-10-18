@@ -29,9 +29,12 @@ async def save_analysis(user_id: str, filename: str, analysis_result: Dict) -> O
         return str(o)
     serializable_result = json.loads(json.dumps(analysis_result, default=_json_default))
 
+    job_title = serializable_result.get("job_title") or "General Analysis"
+
     doc = {
         "user_id": user_id,
         "filename": filename,
+        "job_title": job_title,
         "ats_score": serializable_result.get("ats_score", 0),
         "keyword_match": serializable_result.get("keyword_match", 0),
         "missing_keywords": serializable_result.get("missing_keywords", []),
@@ -77,17 +80,19 @@ async def get_user_history(user_id: str) -> List[Dict]:
             
             results = []
             for doc in docs:
+                saved_result = doc.get("analysis_result") or {}
+                resolved_job_title = doc.get("job_title") or saved_result.get("job_title") or "General Analysis"
                 results.append({
                     "id": str(doc.get("id")),
                     "filename": doc.get("filename", "resume"),
                     "resume_name": doc.get("filename", "resume"),
-                    "job_title": "Software Engineer",
+                    "job_title": resolved_job_title,
                     "ats_score": doc.get("ats_score", 0),
                     "keyword_match": doc.get("keyword_match", 0),
                     "missing_keywords": doc.get("missing_keywords", []),
                     "date": doc.get("created_at", ""),
                     "created_at": doc.get("created_at", ""),
-                    "analysis_result": doc.get("analysis_result", {}),
+                    "analysis_result": saved_result,
                 })
             return results
     except Exception as exc:

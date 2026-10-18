@@ -12,14 +12,15 @@ GROQ_MODEL='llama-3.3-70b-versatile'
 
 _client=None
 
-def _get_client()->Groq:
+MAX_RAW_TEXT_CHARS = 20000
+
+def _get_client() -> Groq:
     global _client
     if _client is None:
-        api_key=os.getenv('GROQ_API_KEY')
-
+        api_key = os.getenv('GROQ_API_KEY')
         if not api_key:
             raise ValueError("GROQ_API_KEY environment variable not set")
-        _client=Groq(api_key=api_key)
+        _client = Groq(api_key=api_key, timeout=30.0)
     return _client
 
 RESUME_SYSTEM_PROMPT = (
@@ -75,26 +76,36 @@ Important instructions:
 Resume Text:
 {raw_text}"""
 
-def _call_groq(client:Groq, system_prompt:str, user_prompt:str)->str:
-
-    response=client.chat.completions.create(
-        model=GROQ_MODEL, 
-        messages=[
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': user_prompt}
-        ],
-        temperature=0.0,
-        max_tokens=4096
-    )
-
-    return response.choices[0].message.content.strip()
+def _call_groq(client: Groq, system_prompt: str, user_prompt: str) -> str:
+    try:
+        response = client.chat.completions.create(
+            model=GROQ_MODEL, 
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as exc:
+        logger.warning(f"Groq API call with json_object format failed: {exc}, retrying without response_format...")
+        response = client.chat.completions.create(
+            model=GROQ_MODEL, 
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt}
+            ],
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        return response.choices[0].message.content.strip()
 
 def _try_parse_json(text: str) -> dict | None:
-
     # Strip markdown code fences if present
     cleaned = text.strip()
     if cleaned.startswith("```"):
-
         # Remove opening fence (```json or ```)
         first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
         cleaned = cleaned[first_newline + 1:]
@@ -107,19 +118,18 @@ def _try_parse_json(text: str) -> dict | None:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         return None
-    
-def parse_resume(raw_text: str)->Dict:
 
-    client=_get_client()
-    prompt=RESUME_USER_PROMPT.format(raw_text=raw_text)
-    raw_response=_call_groq(client, RESUME_SYSTEM_PROMPT, prompt)
-    result=_try_parse_json(raw_response)
+def parse_resume(raw_text: str) -> Dict:
+    raw_text = (raw_text or "")[:MAX_RAW_TEXT_CHARS]
+    client = _get_client()
+    prompt = RESUME_USER_PROMPT.format(raw_text=raw_text)
+    raw_response = _call_groq(client, RESUME_SYSTEM_PROMPT, prompt)
+    result = _try_parse_json(raw_response)
 
-    if result is None:
+    if result is not None:
         return _validate_resume_result(result)
-    
 
-    logger.warning("Groq resume parse: first attempt returned invalid JSON, retrying...")
+    logger.warning("Groq resume parse: first attempt returned invalid JSON, retrying once...")
     strict_prompt = (
         "Your previous response was not valid JSON. "
         "Return ONLY the raw JSON object, no markdown, no explanation, no code fences.\n\n"
@@ -133,7 +143,7 @@ def parse_resume(raw_text: str)->Dict:
     raise ValueError(
         f"Groq returned unparseable response after retry. Raw response:\n{raw_response[:500]}"
     )
-    
+
 JD_SYSTEM_PROMPT = (
     "You are a job description parser. Extract information and "
     "return ONLY a valid JSON object. No explanation, no markdown."
@@ -161,6 +171,7 @@ Job Description Text:
 {raw_text}"""
 
 def parse_job_description(raw_text: str) -> Dict:
+    raw_text = (raw_text or "")[:MAX_RAW_TEXT_CHARS]
     client = _get_client()
     prompt = JD_USER_PROMPT.format(raw_text=raw_text)
 
@@ -169,7 +180,7 @@ def parse_job_description(raw_text: str) -> Dict:
     if result is not None:
         return _validate_jd_result(result)
 
-    logger.warning("Groq JD parse: first attempt returned invalid JSON, retrying...")
+    logger.warning("Groq JD parse: first attempt returned invalid JSON, retrying once...")
     strict_prompt = (
         "Your previous response was not valid JSON. "
         "Return ONLY the raw JSON object, no markdown, no explanation, no code fences.\n\n"

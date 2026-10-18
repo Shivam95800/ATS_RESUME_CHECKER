@@ -59,7 +59,18 @@ app.add_middleware(
     allow_headers     = ['*'],
 )
 
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
 app.include_router(router)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled server exception on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please try again later."}
+    )
 
 @app.get('/')
 async def root():

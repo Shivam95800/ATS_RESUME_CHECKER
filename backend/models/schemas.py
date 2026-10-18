@@ -32,15 +32,18 @@ class IssueDetail(BaseModel):
     action_items: List[str] = []
     example_improvement: str
 
+from backend.core.config import COMPONENT_MAXIMA
+
 class AnalysisResponse(BaseModel):
-    ATS_score: float
+    ats_score: float
     component_scores: ComponentScores
-    issues_summary: List[str]
-    detailed_feedback: List[IssueDetail]
+    score_maxima: Dict[str, float] = COMPONENT_MAXIMA
+    issues_summary: List[str] = []
+    detailed_feedback: List[IssueDetail] = []
     jd_match_analysis: Optional[JDComparison] = None
     skill_validation_details: Optional[SkillValidationDetails] = None
 
-    ats_score: float
+    job_title: str = ""
     keyword_match: float = 0.0
     missing_keywords: List[str] = []
     matched_keywords: List[str] = []

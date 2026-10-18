@@ -22,13 +22,19 @@ from backend.core.config import (
     SUPPORTED_MIME_TYPES
 )
 
-class FileParsingError(Exception):
-    pass
-
 class FileValidationError(Exception):
     pass
 
-def validate_file(file_data:bytes, filename:str)->Tuple[bool, str, Optional[str]]:
+class FileTooLargeError(FileValidationError):
+    pass
+
+class UnsupportedFileTypeError(FileValidationError):
+    pass
+
+class FileEmptyError(FileValidationError):
+    pass
+
+def validate_file(file_data: bytes, filename: str) -> Tuple[bool, str, Optional[str]]:
     file_size_bytes = len(file_data)
     if file_size_bytes > MAX_FILE_SIZE_BYTES:
         size_mb = file_size_bytes / (1024 * 1024)
@@ -37,8 +43,8 @@ def validate_file(file_data:bytes, filename:str)->Tuple[bool, str, Optional[str]
             'Please upload a smaller file or compress your resume.'
         ), None
     
-    if file_size_bytes==0:
-        return False, 'uploade file is empty...please check the file you have uploaded and try again'
+    if file_size_bytes == 0:
+        return False, 'Uploaded file is empty. Please check the file you have uploaded and try again.', None
     
     try:
         mime_type=magic.from_buffer(file_data, mime=True)
@@ -220,13 +226,20 @@ def parse_resume_file(file_data: bytes, filename:str)->Tuple[str, dict]:
 
     #phase01:validate file
     try:
-        is_valid, error_msg, file_type=validate_file(file_data, filename)
+        is_valid, error_msg, file_type = validate_file(file_data, filename)
         if not is_valid:
-            log_warning(f'valiudation failed for file {filename}', context='parse_resume_file')
-            raise FileValidationError(error_msg)
+            log_warning(f'validation failed for file {filename}: {error_msg}', context='parse_resume_file')
+            if 'exceeds the maximum' in error_msg:
+                raise FileTooLargeError(error_msg)
+            elif 'Unsupported file type' in error_msg or 'error deteminin' in error_msg.lower():
+                raise UnsupportedFileTypeError(error_msg)
+            elif 'empty' in error_msg.lower():
+                raise FileEmptyError(error_msg)
+            else:
+                raise FileValidationError(error_msg)
     
-    except FileValidationError as e:
-        raise 
+    except FileValidationError:
+        raise
 
     except Exception as e:
         log_error(e, context='parse_resume_file_validation')

@@ -3,6 +3,8 @@ from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from typing import Dict
 
+from backend.core.config import COMPONENT_MAXIMA
+
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'templates')
 env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
@@ -22,31 +24,31 @@ def generate_html_reports(analysis_data: Dict) -> Dict[str, str]:
     # 1. Extract timestamp 
     now = datetime.now().isoformat()
 
-    # 2.Overall score + interpretation 
-    overall_score = analysis_data.get('ATS_score', 0) or analysis_data.get('ats_score', 0)
+    # 2. Overall score + interpretation 
+    overall_score = float(analysis_data.get('ats_score', 0) or analysis_data.get('ATS_score', 0))
     interpretation = analysis_data.get('interpretation') or ''  
     cs = analysis_data.get('component_scores') or {}
     if hasattr(cs, '__dict__'):      # handle Pydantic model objects
         cs = cs.__dict__
 
     component_scores = {
-        'formatting':       float(cs.get('formatting', 0)),
-        'keywords':         float(cs.get('keywords', 0)),
-        'content':          float(cs.get('content', 0)),
-        'skill_validation': float(cs.get('skill_validation', 0)),
+        'formatting':        float(cs.get('formatting', 0)),
+        'keywords':          float(cs.get('keywords', 0)),
+        'content':           float(cs.get('content', 0)),
+        'skill_validation':  float(cs.get('skill_validation', 0)),
         'ats_compatibility': float(cs.get('ats_compatibility', 0)),
     }
 
-    # Progress-bar percentages (used in Report 1's visual breakdown)
+    # Progress-bar percentages (using canonical config maxima)
     def pct(score, max_score):
-        return min(100, max(0, round(score / max_score * 100)))
+        return min(100, max(0, round(score / max_score * 100))) if max_score > 0 else 0
 
     component_pct = {
-        'formatting':       pct(component_scores['formatting'],       20),
-        'keywords':         pct(component_scores['keywords'],         25),
-        'content':          pct(component_scores['content'],          25),
-        'skill_validation': pct(component_scores['skill_validation'], 15),
-        'ats_compatibility': pct(component_scores['ats_compatibility'], 15),
+        'formatting':        pct(component_scores['formatting'],        COMPONENT_MAXIMA['formatting']),
+        'keywords':          pct(component_scores['keywords'],          COMPONENT_MAXIMA['keywords']),
+        'content':           pct(component_scores['content'],           COMPONENT_MAXIMA['content']),
+        'skill_validation':  pct(component_scores['skill_validation'],  COMPONENT_MAXIMA['skill_validation']),
+        'ats_compatibility': pct(component_scores['ats_compatibility'], COMPONENT_MAXIMA['ats_compatibility']),
     }
 
     raw_feedback = analysis_data.get('detailed_feedback', [])
