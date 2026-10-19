@@ -132,6 +132,16 @@ export default function ScorerPage() {
     }
 
     setErrorMessage(null);
+
+    // Verify authentication before submitting
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setErrorMessage('AUTH_REQUIRED: Please sign in or create an account first to analyze and save your resume.');
+      return;
+    }
+
     setAnalyzing(true);
     setProgressMsgIndex(0);
 
@@ -141,7 +151,11 @@ export default function ScorerPage() {
       setResults(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to analyze resume. Please try again.';
-      setErrorMessage(msg);
+      if (msg.includes('Authorization') || msg.includes('token') || msg.includes('401')) {
+        setErrorMessage('AUTH_REQUIRED: Your session has expired. Please sign in again to continue.');
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -215,7 +229,19 @@ export default function ScorerPage() {
       {errorMessage && (
         <div className="max-w-4xl mx-auto mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-start gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">{errorMessage}</div>
+          <div className="flex-1">
+            {errorMessage.replace('AUTH_REQUIRED:', '').trim()}
+            {errorMessage.startsWith('AUTH_REQUIRED:') && (
+              <div className="mt-2.5">
+                <a
+                  href="/login?next=/scorer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition shadow-sm"
+                >
+                  Sign In or Create Account
+                </a>
+              </div>
+            )}
+          </div>
           <button onClick={() => setErrorMessage(null)} className="text-xs font-semibold hover:underline">
             Dismiss
           </button>
