@@ -11,6 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
     MALLOC_ARENA_MAX=2 \
     OMP_NUM_THREADS=1 \
     TORCH_NUM_THREADS=1 \
+    HF_HOME=/app/cache/huggingface \
+    TORCH_HOME=/app/cache/torch \
     PORT=8000
 
 WORKDIR /app
@@ -39,14 +41,15 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
-# Pre-download lightweight NLP model and embeddings during image build
-RUN python -m spacy download en_core_web_sm \
-    && python -c "import torch; torch.set_num_threads(1); from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', device='cpu')"
+# Pre-download lightweight NLP model and embeddings into shared /app/cache
+RUN mkdir -p /app/cache/huggingface /app/cache/torch \
+    && python -m spacy download en_core_web_sm \
+    && python -c "import os; os.environ['HF_HOME']='/app/cache/huggingface'; from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', device='cpu')"
 
 # Copy backend source code
 COPY backend/ ./backend/
 
-# Create a non-privileged user and switch to it
+# Create a non-privileged user and grant ownership over /app and cache
 RUN useradd -m -u 1000 appuser \
     && chown -R appuser:appuser /app /home/appuser
 USER appuser

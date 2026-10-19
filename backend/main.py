@@ -136,7 +136,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "An internal server error occurred. Please try again later."}
     )
 
-@app.get('/')
+@app.api_route('/', methods=['GET', 'HEAD'])
 async def root():
     return {
         'name':      'ATS Resume Analyzer API',

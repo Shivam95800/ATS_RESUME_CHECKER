@@ -188,7 +188,7 @@ async def analyze_resume(
 
     return response
 
-@router.get('/health')
+@router.api_route('/health', methods=['GET', 'HEAD'])
 async def health_check(request: Request):
     """Health check — confirms models are loaded and the API is ready."""
     return {
