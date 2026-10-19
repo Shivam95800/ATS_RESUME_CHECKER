@@ -1,0 +1,708 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ATS RESUME ANALYZER API",
+    "description": "analyse resumes against job description using nlp + ml",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/parse-jd": {
+      "post": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Parse Jd",
+        "description": "Extract and return plain text from an uploaded Job Description (PDF, DOCX, or TXT).",
+        "operationId": "parse_jd_api_v1_parse_jd_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_parse_jd_api_v1_parse_jd_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analyze-resume": {
+      "post": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Analyze Resume",
+        "operationId": "analyze_resume_api_v1_analyze_resume_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_resume_api_v1_analyze_resume_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Health Check",
+        "description": "Health check \u2014 confirms models are loaded and the API is ready.",
+        "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/history": {
+      "get": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Get History",
+        "description": "Return the signed-in user's past analyses (identity comes from the JWT).",
+        "operationId": "get_history_api_v1_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/history/{analysis_id}": {
+      "delete": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Delete History Entry",
+        "description": "Delete one analysis from the signed-in user's history.",
+        "operationId": "delete_history_entry_api_v1_history__analysis_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate-pdf": {
+      "post": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Generate Pdf",
+        "operationId": "generate_pdf_api_v1_generate_pdf_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisResponse"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/history/{analysis_id}/pdf": {
+      "get": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Generate History Pdf",
+        "operationId": "generate_history_pdf_api_v1_history__analysis_id__pdf_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisResponse": {
+        "properties": {
+          "ats_score": {
+            "type": "number",
+            "title": "Ats Score"
+          },
+          "component_scores": {
+            "$ref": "#/components/schemas/ComponentScores"
+          },
+          "score_maxima": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Maxima",
+            "default": {
+              "formatting": 20.0,
+              "keywords": 25.0,
+              "content": 25.0,
+              "skill_validation": 15.0,
+              "ats_compatibility": 15.0
+            }
+          },
+          "issues_summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues Summary",
+            "default": []
+          },
+          "detailed_feedback": {
+            "items": {
+              "$ref": "#/components/schemas/IssueDetail"
+            },
+            "type": "array",
+            "title": "Detailed Feedback",
+            "default": []
+          },
+          "jd_match_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JDComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skill_validation_details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillValidationDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title",
+            "default": ""
+          },
+          "keyword_match": {
+            "type": "number",
+            "title": "Keyword Match",
+            "default": 0.0
+          },
+          "missing_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Keywords",
+            "default": []
+          },
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Keywords",
+            "default": []
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggestions",
+            "default": []
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths",
+            "default": []
+          },
+          "critical_issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Critical Issues",
+            "default": []
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills",
+            "default": []
+          },
+          "jd_comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JDComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "interpretation": {
+            "type": "string",
+            "title": "Interpretation",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "ats_score",
+          "component_scores"
+        ],
+        "title": "AnalysisResponse"
+      },
+      "Body_analyze_resume_api_v1_analyze_resume_post": {
+        "properties": {
+          "resume": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Resume",
+            "description": "Resume file \u2014 PDF or DOCX, max 5 MB"
+          },
+          "job_description": {
+            "type": "string",
+            "title": "Job Description",
+            "description": "Job description text (optional)",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume"
+        ],
+        "title": "Body_analyze_resume_api_v1_analyze_resume_post"
+      },
+      "Body_parse_jd_api_v1_parse_jd_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Job description file (PDF, DOCX, or TXT, max 5 MB)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_parse_jd_api_v1_parse_jd_post"
+      },
+      "ComponentScores": {
+        "properties": {
+          "formatting": {
+            "type": "number",
+            "title": "Formatting"
+          },
+          "keywords": {
+            "type": "number",
+            "title": "Keywords"
+          },
+          "content": {
+            "type": "number",
+            "title": "Content"
+          },
+          "skill_validation": {
+            "type": "number",
+            "title": "Skill Validation"
+          },
+          "ats_compatibility": {
+            "type": "number",
+            "title": "Ats Compatibility"
+          }
+        },
+        "type": "object",
+        "required": [
+          "formatting",
+          "keywords",
+          "content",
+          "skill_validation",
+          "ats_compatibility"
+        ],
+        "title": "ComponentScores"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IssueDetail": {
+        "properties": {
+          "issue_title": {
+            "type": "string",
+            "title": "Issue Title"
+          },
+          "severity_level": {
+            "type": "string",
+            "title": "Severity Level"
+          },
+          "ats_impact": {
+            "type": "string",
+            "title": "Ats Impact"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "where_it_appears": {
+            "type": "string",
+            "title": "Where It Appears"
+          },
+          "how_to_fix": {
+            "type": "string",
+            "title": "How To Fix"
+          },
+          "action_items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Action Items",
+            "default": []
+          },
+          "example_improvement": {
+            "type": "string",
+            "title": "Example Improvement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issue_title",
+          "severity_level",
+          "ats_impact",
+          "explanation",
+          "where_it_appears",
+          "how_to_fix",
+          "example_improvement"
+        ],
+        "title": "IssueDetail"
+      },
+      "JDComparison": {
+        "properties": {
+          "match_percentage": {
+            "type": "number",
+            "title": "Match Percentage"
+          },
+          "semantic_similarity": {
+            "type": "number",
+            "title": "Semantic Similarity"
+          },
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Keywords"
+          },
+          "missing_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Keywords"
+          },
+          "skills_gap": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills Gap"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_percentage",
+          "semantic_similarity",
+          "matched_keywords",
+          "missing_keywords",
+          "skills_gap"
+        ],
+        "title": "JDComparison"
+      },
+      "SkillValidationDetails": {
+        "properties": {
+          "validated": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Validated",
+            "default": []
+          },
+          "unvalidated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unvalidated",
+            "default": []
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "validated_count": {
+            "type": "integer",
+            "title": "Validated Count",
+            "default": 0
+          },
+          "validation_pct": {
+            "type": "number",
+            "title": "Validation Pct",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "SkillValidationDetails"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

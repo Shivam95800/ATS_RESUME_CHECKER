@@ -1,0 +1,20 @@
+.git
+.github
+.agents
+.gemini
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+tests/
+web/
+frontend_streamlit_legacy/
+jupyter notebooks/
+*.log
+.env
+.env.local

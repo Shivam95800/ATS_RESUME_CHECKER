@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ats-resume-checker-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: "true"
+      - key: SENTENCE_TRANSFORMER_MODEL
+        value: "all-MiniLM-L6-v2"
+      - key: SPACY_MODEL
+        value: "en_core_web_md"
