@@ -56,26 +56,34 @@ async def lifespan(app: FastAPI):
     try:
         app.state.nlp = spacy.load(SPACY_MODEL_PRIMARY)
         logger.info(f'Loaded {SPACY_MODEL_PRIMARY}')
-    except OSError:
-        logger.warning(f'{SPACY_MODEL_PRIMARY} not found — falling back to {SPACY_MODEL_SECONDARY}')
+    except Exception as exc:
+        logger.warning(f'{SPACY_MODEL_PRIMARY} load error: {exc} — falling back to {SPACY_MODEL_SECONDARY}')
         app.state.nlp = spacy.load(SPACY_MODEL_SECONDARY)
         logger.info(f'Loaded {SPACY_MODEL_SECONDARY} (fallback)')
 
     gc.collect()
 
-    try:
-        import torch
-        torch.set_num_threads(1)
-        logger.info(f'Loading SentenceTransformer: {SENTENCE_TRANSFORMER_MODEL}')
-        from sentence_transformers import SentenceTransformer
-        app.state.embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-        logger.info(f'Loaded {SENTENCE_TRANSFORMER_MODEL}')
-    except Exception as exc:
-        logger.warning(f"SentenceTransformer preload deferred or failed: {exc}")
-        app.state.embedder = None
+    app.state.embedder = None
 
-    gc.collect()
-    logger.info('API is ready to serve requests.')
+    # Load SentenceTransformer in background task so Uvicorn binds port immediately
+    async def _load_embedder_bg():
+        try:
+            import torch
+            torch.set_num_threads(1)
+            logger.info(f'Background loading SentenceTransformer: {SENTENCE_TRANSFORMER_MODEL}')
+            from sentence_transformers import SentenceTransformer
+            from starlette.concurrency import run_in_threadpool
+            embedder_instance = await run_in_threadpool(SentenceTransformer, SENTENCE_TRANSFORMER_MODEL)
+            app.state.embedder = embedder_instance
+            gc.collect()
+            logger.info(f'Successfully loaded SentenceTransformer: {SENTENCE_TRANSFORMER_MODEL}')
+        except Exception as exc:
+            logger.warning(f"SentenceTransformer background load failed: {exc}")
+
+    import asyncio
+    asyncio.create_task(_load_embedder_bg())
+
+    logger.info('API server startup complete, ready to bind port and serve.')
 
     yield
 

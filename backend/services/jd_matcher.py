@@ -13,8 +13,17 @@ from rapidfuzz import fuzz
 
 
 def calculate_semantic_similarity(
-    resume_text: str, jd_text: str, embedder: SentenceTransformer
+    resume_text: str, jd_text: str, embedder: SentenceTransformer | None
 ) -> float:
+    if embedder is None:
+        words_r = set(resume_text.lower().split())
+        words_j = set(jd_text.lower().split())
+        if not words_r or not words_j:
+            return 0.5
+        intersection = len(words_r & words_j)
+        union = len(words_r | words_j)
+        return float(np.clip(intersection / max(union, 1) * 2.5, 0.0, 1.0))
+
     resume_emb = embedder.encode(resume_text[:5000], convert_to_tensor=False)
     jd_emb     = embedder.encode(jd_text[:5000], convert_to_tensor=False)
 

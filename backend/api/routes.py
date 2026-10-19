@@ -76,7 +76,15 @@ async def analyze_resume(
     warnings: List[str] = []
 
     nlp      = request.app.state.nlp
-    embedder = request.app.state.embedder
+    embedder = getattr(request.app.state, 'embedder', None)
+    if embedder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            from backend.core.config import SENTENCE_TRANSFORMER_MODEL
+            embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, device='cpu')
+            request.app.state.embedder = embedder
+        except Exception as exc:
+            logger.warning(f"Could not load SentenceTransformer on demand: {exc}")
 
     try:
         file_bytes = await resume.read()

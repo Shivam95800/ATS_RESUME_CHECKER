@@ -119,7 +119,7 @@ def validate_skills_with_projects(
 
     # Pre-encode candidate texts once
     candidate_embeddings = []
-    if candidate_texts:
+    if candidate_texts and embedder is not None:
         try:
             candidate_embeddings = embedder.encode(candidate_texts, convert_to_tensor=False)
             # Normalize embeddings for cosine similarity
@@ -133,13 +133,14 @@ def validate_skills_with_projects(
 
     # Pre-encode skills once in batch
     skill_embeddings = {}
-    try:
-        raw_skill_embs = embedder.encode(skills, convert_to_tensor=False)
-        for skill, vec in zip(skills, raw_skill_embs):
-            norm = np.linalg.norm(vec)
-            skill_embeddings[skill] = vec / norm if norm > 0 else vec
-    except Exception as exc:
-        log_warning(f"Error batch encoding skills: {exc}", context='ats_scorer')
+    if embedder is not None:
+        try:
+            raw_skill_embs = embedder.encode(skills, convert_to_tensor=False)
+            for skill, vec in zip(skills, raw_skill_embs):
+                norm = np.linalg.norm(vec)
+                skill_embeddings[skill] = vec / norm if norm > 0 else vec
+        except Exception as exc:
+            log_warning(f"Error batch encoding skills: {exc}", context='ats_scorer')
 
     validated_skills      = []
     unvalidated_skills    = []
