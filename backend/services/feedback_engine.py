@@ -10,7 +10,10 @@ def analyze_issues(
         action_verbs: List[str], 
         skill_validation: Dict, 
         scores: Dict, 
-        contact_info: Optional[Dict]=None, 
+        contact_info: Optional[Dict] = None, 
+        jd_comparison: Optional[Dict] = None,
+        grammar_results: Optional[Dict] = None,
+        location_results: Optional[Dict] = None,
 ) -> List[IssueDetail]:
     
     detected: List[IssueDetail]=[]
@@ -402,6 +405,145 @@ def analyze_issues(
                 "Full-stack developer with 2+ years of experience building scalable "
                 "web applications using React, Node.js, and AWS. Passionate about "
                 "clean architecture and performance optimization."
+            ),
+        ))
+
+    # 11. Missing Target Job Description Keywords
+    if jd_comparison:
+        missing_kw = jd_comparison.get('missing_keywords', [])
+        match_pct = float(jd_comparison.get('match_percentage', 0.0))
+        if missing_kw:
+            missing_sample = missing_kw[:6]
+            missing_str = ', '.join(missing_sample)
+            sev = "High" if (match_pct < 50.0 or len(missing_kw) >= 5) else "Moderate"
+            detected.append(IssueDetail(
+                issue_title="Missing Key Job Description Terms",
+                severity_level=sev,
+                ats_impact="High",
+                explanation=(
+                    f"Your resume is missing {len(missing_kw)} important keywords and qualifications "
+                    "found in the target job description. ATS screening algorithms rank candidates "
+                    "largely on matching these key technical and domain phrases."
+                ),
+                where_it_appears=f"Target Job Description alignment — missing: {missing_str}",
+                how_to_fix=(
+                    "Incorporate the missing keywords naturally into your experience bullet points, "
+                    "project descriptions, or technical skills section where you have genuine experience."
+                ),
+                action_items=[
+                    f"Review these missing keywords: {', '.join(missing_kw[:8])}",
+                    "Integrate matching keywords into your most relevant work experience bullet points",
+                    "Add missing technologies to your Skills section if you have worked with them",
+                    "Ensure technical terms match the exact naming conventions used in the job post",
+                    "Do not keyword-stuff; weave terms into contextual achievement bullets",
+                ],
+                example_improvement=(
+                    f"Missing keyword: {missing_kw[0]}\n\n"
+                    "Before:\n"
+                    "• Worked on backend services and cloud deployments.\n\n"
+                    "After:\n"
+                    f"• Engineered scalable backend services using {missing_kw[0]} and Docker, "
+                    "improving deployment throughput by 35%."
+                ),
+            ))
+
+        # 12. Skills Gap Identified
+        skills_gap = jd_comparison.get('skills_gap', [])
+        if skills_gap:
+            gap_sample = skills_gap[:5]
+            gap_str = ', '.join(gap_sample)
+            action_items_gap = [f"Add '{s}' to your Skills section if you have experience with it" for s in gap_sample[:4]]
+            action_items_gap.append("Provide a tangible project or experience bullet demonstrating how you used it")
+            detected.append(IssueDetail(
+                issue_title="Skills Gap Against Target Role",
+                severity_level="Moderate",
+                ats_impact="High",
+                explanation=(
+                    f"The job description emphasizes {len(skills_gap)} technical skill(s) "
+                    "that were not detected in your resume. Recruiters actively look for these competencies."
+                ),
+                where_it_appears=f"Technical Stack — skills gap: {gap_str}",
+                how_to_fix=(
+                    "Add any of these skills that you possess to your Technical Skills section, "
+                    "and highlight them in your project or internship descriptions."
+                ),
+                action_items=action_items_gap,
+                example_improvement=(
+                    f"Missing skill: {skills_gap[0]}\n\n"
+                    "Add to a project bullet:\n"
+                    f"• Developed full-stack modules incorporating {skills_gap[0]} "
+                    "to streamline data processing and optimize query speeds by 25%."
+                ),
+            ))
+
+    # 13. Grammar, Capitalization, and Text Quality Errors
+    if grammar_results and grammar_results.get('total_errors', 0) > 0:
+        crit_errs = grammar_results.get('critical_errors', [])
+        mod_errs = grammar_results.get('moderate_errors', [])
+        min_errs = grammar_results.get('minor_errors', [])
+        all_err_msgs = crit_errs + mod_errs + min_errs
+
+        err_summary = '; '.join(all_err_msgs[:3])
+        sev = "High" if crit_errs else "Moderate"
+        detected.append(IssueDetail(
+            issue_title="Grammar & Text Quality Errors",
+            severity_level=sev,
+            ats_impact="Medium",
+            explanation=(
+                f"Scanning detected {grammar_results.get('total_errors', 0)} text quality issues, "
+                "such as repeated words, duplicate punctuation, or inconsistent capitalization. "
+                "Typos and duplicate words reflect poorly on attention to detail and can confuse ATS tokenizers."
+            ),
+            where_it_appears=f"Resume text — issues found: {err_summary}",
+            how_to_fix=(
+                "Carefully proofread your resume. Fix duplicated words, ensure consistent double-space removal, "
+                "and ensure every bullet point begins with a capitalized letter."
+            ),
+            action_items=[
+                "Proofread lines flagged for repeated words and repeated punctuation",
+                "Ensure every bullet point begins with a capital letter",
+                "Normalize spacing to ensure single spaces between words",
+                "Use an automated grammar checker or peer review before submitting",
+            ],
+            example_improvement=(
+                "Before:\n"
+                "• the the system was deployed with  double spaces and lowercase start.\n\n"
+                "After:\n"
+                "• Deployed the production system with automated testing and zero downtime."
+            ),
+        ))
+
+    # 14. Location & Contact Privacy Risks
+    if location_results and location_results.get('privacy_risk') in ('high', 'medium'):
+        det_locs = location_results.get('detected_locations', [])
+        loc_recs = location_results.get('recommendations', [])
+        address_found = any(l.get('type') == 'address' for l in det_locs)
+        zip_found = any(l.get('type') == 'zip' for l in det_locs)
+
+        detected.append(IssueDetail(
+            issue_title="Excessive Location & Privacy Risk",
+            severity_level="Moderate" if location_results.get('privacy_risk') == 'high' else "Low",
+            ats_impact="Low",
+            explanation=(
+                "Your resume includes specific street addresses, postal/PIN codes, or excessive location details. "
+                "Modern ATS and hiring guidelines recommend omitting full residential addresses to safeguard privacy "
+                "and prevent location bias."
+            ),
+            where_it_appears="Header / Contact section — detected street address or postal code",
+            how_to_fix=(
+                "Remove your full street address and postal/PIN code. "
+                "Listing just 'City, State' or 'City, Country' in your contact header is standard and sufficient."
+            ),
+            action_items=[
+                "Remove full residential street address (e.g., apartment/house number, street name)",
+                "Remove postal/ZIP/PIN codes",
+                "Format location simply as: City, State/Country (e.g., 'Austin, TX' or 'New Delhi, India')",
+            ] + loc_recs[:2],
+            example_improvement=(
+                "Before:\n"
+                "123 Elm Street, Apt 4B, Austin, TX 78701\n\n"
+                "After:\n"
+                "Austin, TX | your.email@example.com | linkedin.com/in/yourprofile"
             ),
         ))
 

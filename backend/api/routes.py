@@ -251,9 +251,9 @@ async def generate_pdf(
     except asyncio.TimeoutError:
         logger.error("PDF generation timed out (>15s)")
         raise HTTPException(status_code=504, detail="PDF generation timed out (>15s). Please try again.")
-    except ImportError as e:
+    except (ImportError, OSError) as e:
         logger.error(f"PDF rendering library unavailable: {e}")
-        raise HTTPException(status_code=503, detail="PDF generation service unavailable (WeasyPrint not installed).")
+        raise HTTPException(status_code=503, detail="PDF generation service unavailable.")
     except Exception as e:
         logger.error(f'Failed to generate PDF: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
@@ -296,9 +296,9 @@ async def generate_history_pdf(
     except asyncio.TimeoutError:
         logger.error(f"History PDF generation timed out for {analysis_id}")
         raise HTTPException(status_code=504, detail="PDF generation timed out (>15s). Please try again.")
-    except ImportError as e:
+    except (ImportError, OSError) as e:
         logger.error(f"PDF rendering library unavailable: {e}")
-        raise HTTPException(status_code=503, detail="PDF generation service unavailable (WeasyPrint not installed).")
+        raise HTTPException(status_code=503, detail="PDF generation service unavailable.")
     except Exception as e:
         logger.error(f'Failed to generate PDF for history: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")

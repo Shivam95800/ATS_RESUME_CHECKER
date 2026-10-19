@@ -104,6 +104,9 @@ def analyze_full_resume(
         skill_validation=skill_validation,
         scores=scores,
         contact_info=contact_info,
+        jd_comparison=jd_comparison_result,
+        grammar_results=grammar_results,
+        location_results=location_results,
     )
 
     issues_summary = generate_issues_summary(detailed_feedback)
