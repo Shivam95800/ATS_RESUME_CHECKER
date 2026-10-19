@@ -24,4 +24,4 @@ services:
       - key: SENTENCE_TRANSFORMER_MODEL
         value: "all-MiniLM-L6-v2"
       - key: SPACY_MODEL
-        value: "en_core_web_md"
+        value: "en_core_web_sm"

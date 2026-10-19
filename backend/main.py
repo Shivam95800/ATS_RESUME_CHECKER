@@ -50,8 +50,9 @@ async def lifespan(app: FastAPI):
     if missing_optional:
         logger.info("Startup check - Missing optional environment variables (defaults active): %s", ", ".join(missing_optional))
 
-    logger.info(f'Loading spaCy NLP model: {SPACY_MODEL_PRIMARY}')
+    import gc
     import spacy
+    logger.info(f'Loading spaCy NLP model: {SPACY_MODEL_PRIMARY}')
     try:
         app.state.nlp = spacy.load(SPACY_MODEL_PRIMARY)
         logger.info(f'Loaded {SPACY_MODEL_PRIMARY}')
@@ -60,12 +61,21 @@ async def lifespan(app: FastAPI):
         app.state.nlp = spacy.load(SPACY_MODEL_SECONDARY)
         logger.info(f'Loaded {SPACY_MODEL_SECONDARY} (fallback)')
 
-    logger.info(f'Loading SentenceTransformer: {SENTENCE_TRANSFORMER_MODEL}')
-    from sentence_transformers import SentenceTransformer
-    app.state.embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-    logger.info(f'Loaded {SENTENCE_TRANSFORMER_MODEL}')
+    gc.collect()
 
-    logger.info('All models loaded. API is ready to serve requests.')
+    try:
+        import torch
+        torch.set_num_threads(1)
+        logger.info(f'Loading SentenceTransformer: {SENTENCE_TRANSFORMER_MODEL}')
+        from sentence_transformers import SentenceTransformer
+        app.state.embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+        logger.info(f'Loaded {SENTENCE_TRANSFORMER_MODEL}')
+    except Exception as exc:
+        logger.warning(f"SentenceTransformer preload deferred or failed: {exc}")
+        app.state.embedder = None
+
+    gc.collect()
+    logger.info('API is ready to serve requests.')
 
     yield
 

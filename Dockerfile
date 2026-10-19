@@ -35,10 +35,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
-# Pre-download NLP models during image build so startup is fast on Render
-RUN python -m spacy download en_core_web_md \
-    && python -m spacy download en_core_web_sm \
-    && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Pre-download lightweight NLP model and embeddings during image build
+RUN python -m spacy download en_core_web_sm \
+    && python -c "import torch; torch.set_num_threads(1); from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Copy backend source code
 COPY backend/ ./backend/
